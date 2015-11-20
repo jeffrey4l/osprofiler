@@ -17,6 +17,7 @@ import collections
 import functools
 import inspect
 import threading
+import types
 import uuid
 
 from osprofiler import notifier
@@ -102,9 +103,20 @@ def trace(name, info=None, hide_args=False):
                 info["function"]["kwargs"] = str(kwargs)
 
             with Trace(name, info=info):
-                return f(*args, **kwargs)
+                if hasattr(f, '__self__') and f.__self__ is not None:
+                    # classmethod
+                    return types.MethodType(f.im_func, None, f.im_class)(*args, **kwargs)
+                else:
+                    return f(*args, **kwargs)
+        if not f.__dict__.get('__isclassmethod__', False):
+            return wrapper
 
-        return wrapper
+        if isinstance(f, types.FunctionType):
+            return staticmethod(wrapper)
+        if hasattr(f, '__self__') and f.__self__ is not None:
+            return types.MethodType(wrapper, f.im_self, f.im_self)
+        else: 
+            return wrapper
 
     return decorator
 
@@ -144,6 +156,8 @@ def trace_cls(name, info=None, hide_args=False, trace_private=False):
             if not trace_private and attr_name.startswith("_"):
                 continue
 
+            attr.__dict__['__isclassmethod__'] = True
+
             setattr(cls, attr_name,
                     trace(name, info=info, hide_args=hide_args)(attr))
         return cls
@@ -182,6 +196,9 @@ def _get_full_func_name(f):
     if hasattr(f, "__qualname__"):
         # NOTE(boris-42): Most proper way to get full name in py33
         return ".".join([f.__module__, f.__qualname__])
+
+    if hasattr(f, "__self__") and f.__self__ is not None:
+        return ".".join([f.__module__, f.__self__.__name__, f.__name__])
 
     if inspect.ismethod(f):
         return ".".join([f.__module__, f.im_class.__name__, f.__name__])

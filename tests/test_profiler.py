@@ -201,6 +201,14 @@ class FakeTracedCls(object):
     def _method(self, i):
         return i
 
+    @staticmethod
+    def method4(i):
+        return i
+
+    @classmethod
+    def method5(cls, i):
+        return i
+
 
 @profiler.trace_cls("rpc", info={"a": 10})
 class FakeTraceClassWithInfo(FakeTracedCls):
@@ -309,6 +317,42 @@ class TraceClsDecoratorTestCase(test.TestCase):
         }
 
         self.assertEqual(1, len(mock_start.call_args_list))
+        self.assertIn(mock_start.call_args_list[0],
+                      possible_mock_calls("rpc", expected_info))
+        mock_stop.assert_called_once_with()
+
+    @mock.patch("osprofiler.profiler.stop")
+    @mock.patch("osprofiler.profiler.start")
+    def test_class_method(self, mock_start, mock_stop):
+        ret = FakeTraceClassWithInfo.method5(10)
+        self.assertEqual(10, ret)
+        self.assertEqual(1, len(mock_start.call_args_list))
+        expected_info = {
+            "function": {
+                "name": "tests.test_profiler.FakeTraceClassWithInfo.method5",
+                "args": str((FakeTraceClassWithInfo, 10)),
+                "kwargs": str({})
+            },
+            "a": 10,
+        }
+        self.assertIn(mock_start.call_args_list[0],
+                      possible_mock_calls("rpc", expected_info))
+        mock_stop.assert_called_once_with()
+
+    @mock.patch("osprofiler.profiler.stop")
+    @mock.patch("osprofiler.profiler.start")
+    def test_static_method(self, mock_start, mock_stop):
+        ret = FakeTraceClassWithInfo.method4(10)
+        self.assertEqual(10, ret)
+        self.assertEqual(1, len(mock_start.call_args_list))
+        expected_info = {
+            "function": {
+                "name": "tests.test_profiler.method4",
+                "args": str((10, )),
+                "kwargs": str({})
+            },
+            "a": 10,
+        }
         self.assertIn(mock_start.call_args_list[0],
                       possible_mock_calls("rpc", expected_info))
         mock_stop.assert_called_once_with()
